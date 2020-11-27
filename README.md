@@ -1,4 +1,4 @@
-# Snapshots for Home Directories under BTRFS
+# Snapshots for Home Directories on BTRFS
 
 Snapshot support for home directories on btrfs. Regular home directories and those encrypted with ecryptfs are both supported.
 
@@ -12,7 +12,7 @@ the `snapshot` command to be usable, the home directory thus needs to be a btrfs
 ## Usage
 
 The first step is to turn one or more home directories into btrfs subvolumes. Script `home2subvolume` is called with one or more userids and it does this conversion.
-Script `home2subvolume` needs to be run as root when the home directory to be converted is not in use. A backup of the home diretory is a good idea.
+Script `home2subvolume` needs to be run as root when the home directory to be converted is not in use. A backup of the home directory is a good idea.
 
 This is an example. We add two test users, `test` and `etest`. Userid `test` has a regular home directory and `etest`'s home directory is encrypted with ecryptfs.
 We then turn their home directories as well as root's home directory `/root` into btrfs subvolumes.
