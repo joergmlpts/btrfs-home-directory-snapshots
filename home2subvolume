@@ -1,0 +1,95 @@
+#!/bin/bash
+
+###########################################################################
+#                                                                         #
+# This script turns a home directory into a btrfs subvolume. The home     #
+# directory needs to be already on btrfs.                                 #
+#                                                                         #
+# This script supports regular home directories and home directories en-  #
+# crypted with ecryptfs. This script must be run by root, e.g. with       #
+# sudo and no processes should be running belonging to the users whose    #
+# home directories are being converted.                                   #
+#                                                                         #
+# After the home directory has been converted to a btrfs subvolume, the   #
+# script snapshot can be called to create and delete read-only snapshots  #
+# of the home directory.                                                  #
+#                                                                         #
+###########################################################################
+
+# one or more arguments expected
+if [ $# -eq 0 ]; then
+    echo "Usage: $(basename $0) userid \[userid ...\]" >&2
+    echo "Turns home directories into btrfs subvolumes, supports" \
+         "simple home directories as well as ecryptfs. The home directories" \
+         "need to be on btrfs filesystems." >&2
+    exit 1
+fi
+
+if [ $(whoami) != root ]; then
+    echo "Not running as root; run 'sudo $(basename $0)'." >&2
+    exit 1
+fi
+
+for userid in $*; do
+    # get home directory and its parent
+    home_dir=$(eval echo ~"$userid")
+    if [[ $home_dir == ~* ]]; then
+        echo "Userid error: $userid is not a valid userid." >&2
+        exit 1
+    fi
+    parent_dir=$(dirname "$home_dir")
+
+    # consider encypted home directories
+    if [ -d $parent_dir/.ecryptfs/"$userid"/.Private ]; then
+        home_dir=/home/.ecryptfs/"$userid"/.Private
+        parent_dir=$(dirname "$home_dir")
+    fi
+
+    # file system checks and conversion
+    fs=$(stat -f -c %T "$home_dir")
+    if [ $fs != btrfs ]; then
+        echo "Wrong file system: $home_dir is on $fs, not btrfs." >&2
+    elif [ $(stat -c %i "$home_dir") -eq 256 ]; then
+        echo "Already subvolume: $home_dir is already a btrfs subvolume." >&2
+    else
+        if [ -d "$home_dir.subvol" ]; then
+            echo "Temporary directory $home_dir.subvol exists; removing it." >&2
+            if [ $(stat -c %i "$home_dir.subvol") -eq 256 ]; then
+                btrfs subvolume delete -c "$home_dir.subvol"
+            else
+                rm -rf "$home_dir.subvol"
+            fi
+            if [ -d "$home_dir.subvol" ]; then
+                echo "Failed to delete temporary directory; please delete" \
+                     "$home_dir.delete_me later." >&2
+                mv "$home_dir.subvol" "$home_dir.delete_me"
+            fi
+        fi
+
+        echo "Turning $home_dir into a btrfs subvolume..."
+
+        if btrfs subvolume create "$home_dir.subvol" > /dev/null; then
+            trap "" INT TERM HUP
+            cd "$home_dir"
+            if cp -a --reflink=always . "$home_dir.subvol"; then
+                cd /
+                if mv "$home_dir" "$home_dir.bak" && \
+                   mv "$home_dir.subvol" "$home_dir"; then
+                    rm -rf "$home_dir.bak"
+                    echo "Directory $home_dir converted to btrfs subvolume."
+                else
+                    mv "$home_dir.bak" "$home_dir"
+                fi
+                trap - INT TERM HUP
+            else
+                cd /
+                echo "Error: subvolume creation failed; reverting..." >&2
+                btrfs subvolume delete -c "$home_dir.subvol"
+                exit 1
+            fi
+        else
+            echo "Error: subvolume could not be created." >&2
+            exit 1
+        fi
+    fi
+done

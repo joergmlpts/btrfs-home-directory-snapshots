@@ -1,0 +1,157 @@
+#!/bin/bash
+
+########################################################################
+#                                                                      #
+# This script creates and delete snapshots of the home directory. The  #
+# snapshots are stored in directory ~/.snapshots. The file system      #
+# must be btrfs and the home directory needs to be a btrfs subvolume.  #
+# Script home2subvolume can be used to turn a home directory that is   #
+# already on btrfs into a subvolume.  Both plain home directories and  #
+# those encrypted with ecryptfs are supported.                         #
+#                                                                      #
+# Usage:                                                               #
+#        snapshot [ name ]                                             #
+#            Creates snapshot. When name is not given, a name          #
+#            is generated based on the current date and time.          #
+#                                                                      #
+#        snapshot -d|--delete name [ name ... ]                        #
+#            Deletes snapshot(s). Btrfs subvolumes can only be         #
+#            deleted by root. sudo is invoked to delete snapshots.     #
+#                                                                      #
+########################################################################
+
+delete=0
+if [ $# -ge 1 ]; then
+    if [ $1 == '-d' -o $1 == '--delete' ]; then
+        delete=1
+        shift
+    fi
+fi
+
+function usage {
+    echo "Usage:" >&2
+    echo "   $(basename $0) \[ name \]" >&2
+    echo '      Creates new snapshot of home directory in ~/.snapshots.' >&2
+    echo "   $(basename $0) -d|--delete name \[ name ... \]" >&2
+    echo "      Deletes snapshot(s) of home directory." >&2
+    exit 1
+}
+
+if [ $delete == 1 ]; then
+    if [ $# -eq 0 ]; then
+        usage $(basename $0)
+    fi
+else
+    if [ $# -gt 1 ]; then
+        usage $(basename $0)
+    fi
+fi
+
+#
+# File system checks.
+#
+
+fs=$(stat -f -c %T $HOME)
+if [ $fs == ecryptfs ]; then
+    ENC_HOME=$(dirname $HOME)/.ecryptfs/$USER/.Private
+    fs=$(stat -f -c %T $ENC_HOME)
+    if [ $fs != btrfs ]; then
+        echo "Wrong file system: home directory is ecryptfs on $fs, not btrfs."\
+             >&2
+        exit 1
+    elif [ $(stat -c %i $ENC_HOME) -ne 256 ]; then
+        echo "Not a subvolume: $ENC_HOME is not a btrfs subvolume." >&2
+        exit 1
+    fi
+elif [ $fs != btrfs ]; then
+    echo "Wrong file system: home directory is on $fs, not btrfs." >&2
+    exit 1
+elif [ $(stat -c %i $HOME) -ne 256 ]; then
+    echo "Not a subvolume: home directory is not a btrfs subvolume." >&2
+    exit 1
+fi
+
+SNAPSHOTS=$HOME/.snapshots
+
+# print the encrypted path for $2/$1 where $3 is the encrypted path of $2
+function encrypted_path {
+    # parameters: $1 = name, $2 = directory, $3 encrypted directory
+    inode=$(stat -c %i "$2/$1")
+    find "$3" -maxdepth 1 -inum $inode -print
+}
+
+if [ $delete == 0 ]; then
+    # create snapshot
+    if [ $# -eq 1 ] && [ $(basename "$1") != "$1" ]; then
+        echo "Invalid snapshot: name $1 cannot include directory." >&2
+        exit 1
+    fi
+
+    if [ $# -eq 0 ]; then
+        SNAPSHOT_PATH=$SNAPSHOTS/$(date +"%Y-%m-%d_%H:%M:%S")
+    else
+        SNAPSHOT_PATH=$SNAPSHOTS/"$1"
+    fi
+
+    #
+    # Make sure that snapshot does not already exist.
+    #
+    if [ -x "$SNAPSHOT_PATH" ]; then
+        echo "Error: snapshot $SNAPSHOT_PATH already exists." >&2
+        exit 1
+    fi
+
+    #
+    # Create directory ~/.snapshots if it does not already exist.
+    #
+    if [ ! -d $SNAPSHOTS ]; then
+        umask 077
+        mkdir $SNAPSHOTS
+    fi
+
+    if [ ! -z ${ENC_HOME+x} ]; then
+        # create temporary directory to look up its encrypted name
+        ENC_SNAPSHOTS=$(encrypted_path .snapshots $HOME $ENC_HOME)
+        mkdir "$SNAPSHOT_PATH"
+        ENC_SNAPSHOT_PATH=$(encrypted_path $(basename "$SNAPSHOT_PATH") \
+                                           $SNAPSHOTS $ENC_SNAPSHOTS)
+        rmdir "$SNAPSHOT_PATH"
+
+        # create read-only snapshot
+        btrfs subvolume snapshot -r $ENC_HOME $ENC_SNAPSHOT_PATH > /dev/null &&\
+            echo "Created snapshot $SNAPSHOT_PATH."
+    else
+        btrfs subvolume snapshot -r $HOME "$SNAPSHOT_PATH" > /dev/null && \
+            echo "Created snapshot $SNAPSHOT_PATH."
+    fi
+else
+    # delete snapshots
+    for snapshot in $*; do
+        if [ $(basename "$snapshot") != "$snapshot" ]; then
+            echo "Invalid snapshot: name $snapshot cannot include"\
+                 " directory." >&2
+            exit 1
+        fi
+        SNAPSHOT_PATH=$SNAPSHOTS/"$snapshot"
+        if [ ! -d "$SNAPSHOT_PATH" ]; then
+            echo "Not found: $SNAPSHOT_PATH does not exist." >&2
+            exit 1
+        elif [ $(stat -c %i "$SNAPSHOT_PATH") -ne 256 ]; then
+            echo "Not a snapshot: $SNAPSHOT_PATH is not a btrfs subvolume." >&2
+            exit 1
+        elif [ ! -z ${ENC_HOME+x} ]; then
+            mv "$SNAPSHOT_PATH" "$SNAPSHOT_PATH".renamed
+            mkdir "$SNAPSHOT_PATH"
+            ENC_SNAPSHOTS=$(encrypted_path .snapshots $HOME $ENC_HOME)
+            ENC_SNAPSHOT_PATH=$(encrypted_path $(basename "$SNAPSHOT_PATH") \
+                                               $SNAPSHOTS $ENC_SNAPSHOTS)
+            rmdir "$SNAPSHOT_PATH"
+            mv "$SNAPSHOT_PATH".renamed "$SNAPSHOT_PATH"
+            sudo btrfs subvolume delete -c $ENC_SNAPSHOT_PATH > /dev/null && \
+                echo "Snapshot $SNAPSHOT_PATH deleted."
+        else
+            sudo btrfs subvolume delete -c "$SNAPSHOT_PATH" > /dev/null && \
+                echo "Snapshot $SNAPSHOT_PATH deleted."
+        fi
+    done
+fi
