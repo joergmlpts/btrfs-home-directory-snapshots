@@ -2,7 +2,7 @@
 
 ########################################################################
 #                                                                      #
-# This script creates and delete snapshots of the home directory. The  #
+# This script creates and deletes snapshots of the home directory. The #
 # snapshots are stored in directory ~/.snapshots. The file system      #
 # must be btrfs and the home directory needs to be a btrfs subvolume.  #
 # Script home2subvolume can be used to turn a home directory that is   #
