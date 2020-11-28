@@ -4,14 +4,16 @@ Snapshot support for home directories on btrfs. Regular home directories and tho
 
 The script `snapshot` creates and deletes read-only snapshots of the home directory. These snapshots are stored in directory `~/.snapshots/` and each snapshot
 contains all the files and directories of the home directory from the time the snapshot was taken. These read-only snapshots provide access to files which may
-have been modified or deleted since the snapshot was created. Snapshots are not a replacement for backups; they do not guard against hardware failures.
+have been modified or deleted ater the snapshot was created. Snapshots are not a replacement for backups; they do not guard against hardware failures. Unlike btrfs snapshots taken with [timeshift](https://github.com/teejee2008/timeshift), the purpose is not to later restore the system with the snapshots. Home directory snapshots allow us to retrieve a bunch of files and directories that have since been changed or deleted. 
 
 In order for these scripts to work, the `btrfs` file systems needs to used for home directories. Btrfs snapshots can only be created from subvolumes. In order for
 the `snapshot` command to be usable, the home directory thus needs to be a btrfs subvolume. Script `home2subvolume` turns home directories into subvolumes.
 
+These scipts have been written for Ubuntu 20.04 and they likely work for other Linux installations as well. Ubuntu needs to be installed with the root filesystem formatted for btrfs.
+
 ## Usage
 
-The first step is to turn one or more home directories into btrfs subvolumes. Script `home2subvolume` is called with one or more userids and it does this conversion.
+The first step is to turn one or more home directories into btrfs subvolumes. Script `home2subvolume` is called with one or more userids and it performs this conversion.
 Script `home2subvolume` needs to be run as root when the home directory to be converted is not in use. A backup of the home directory is a good idea.
 
 This is an example. We add two test users, `test` and `etest`. Userid `test` has a regular home directory and `etest`'s home directory is encrypted with ecryptfs.
@@ -84,7 +86,7 @@ etest@server:~$ snapshot
 Created snapshot /home/etest/.snapshots/2020-11-26_20:59:07.
 ```
 
-When we list the subvolumes after creating snapshots of encrypted home directories, there will be names like this:
+When we list the subvolumes after creating snapshots of encrypted home directories, there will be a name like this:
 
 ```
 # btrfs subvolume list /
