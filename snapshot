@@ -90,24 +90,21 @@ function encrypted_path {
     # result assigned to enc_path (not returned via echo)
     if [[ "$1" == "$HOME" ]]; then
         enc_path="$ENC_HOME"
-    else
-        if encrypted_path $(dirname "$1"); then
-            enc_dir="$enc_path"
-            inode=$(stat -c %i "$1")
-            if [[ $inode -eq 256 ]]; then
-                echo "Error: snapshot parent $1 cannot be a subvolume." >&2
-                enc_path=
-                return 1
-            fi
-            enc_path="$(find $enc_dir -mindepth 1 -maxdepth 1 \
-                            -inum $inode -print)"
-            if [[ -z "$enc_path" ]]; then
-                echo "Error: failed to lookup encrypted $1." >&2
-                return 1
-            fi
-        else
+    elif encrypted_path $(dirname "$1"); then
+        enc_dir="$enc_path"
+        inode=$(stat -c %i "$1")
+        if [[ $inode -eq 256 ]]; then
+            echo "Error: snapshot parent $1 cannot be a subvolume." >&2
+            enc_path=
             return 1
         fi
+        enc_path="$(find $enc_dir -mindepth 1 -maxdepth 1 -inum $inode -print)"
+        if [[ -z "$enc_path" ]]; then
+            echo "Error: failed to lookup encrypted $1." >&2
+            return 1
+        fi
+    else
+        return 1
     fi
 }
 
