@@ -99,8 +99,12 @@ function encrypted_path {
                 enc_path=
                 return 1
             fi
-            enc_path=$(find "$enc_dir" -mindepth 1 -maxdepth 1 \
-                            -inum $inode -print)
+            enc_path="$(find $enc_dir -mindepth 1 -maxdepth 1 \
+                            -inum $inode -print)"
+            if [[ -z "$enc_path" ]]; then
+                echo "Error: failed to lookup encrypted $1." >&2
+                return 1
+            fi
         else
             return 1
         fi
