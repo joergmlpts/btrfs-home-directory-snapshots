@@ -55,7 +55,7 @@ elif [ $# -gt 1 ]; then
     usage
 fi
 
-if [ ! -z "$subdir" ] && [ $(basename "$subdir") != "$subdir" ]; then
+if [ -n "$subdir" ] && [ $(basename "$subdir") != "$subdir" ]; then
     echo "Invalid subdirectory: \"$subdir\" must not include directory." >&2
     exit 1
 fi
@@ -84,11 +84,18 @@ fi
 SNAPSHOTS=$HOME/.snapshots
 MODE=700 # mode for snapshots
 
-# print the encrypted path for $2/$1 where $3 is the encrypted path of $2
-function encrypted_path {
-    # parameters: $1 = name, $2 = directory, $3 encrypted directory
-    inode=$(stat -c %i "$2/$1")
-    find "$3" -mindepth 1 -maxdepth 1 -inum $inode -print
+function encrypted_path { # recursive function, parameter: $1 = decrypted path
+    if [ "$1" == "$HOME" ]; then
+        echo "$ENC_HOME"
+    else
+        enc_dir=$(encrypted_path $(dirname "$1"))
+        inode=$(stat -c %i "$1")
+        if [ $inode -eq 256 ]; then
+            echo "Error: snapshot parent $1 cannot be a subvolume." >&2
+            exit 1
+        fi
+        find "$enc_dir" -mindepth 1 -maxdepth 1 -inum $inode -print
+    fi
 }
 
 if [ $delete == 0 ]; then
@@ -104,7 +111,7 @@ if [ $delete == 0 ]; then
     fi
 
     SNAPSHOT_PATH=$SNAPSHOTS
-    if [ ! -z "$subdir" ]; then
+    if [ -n "$subdir" ]; then
         SNAPSHOT_PATH=$SNAPSHOTS/"$subdir"
         if [ ! -d "$SNAPSHOT_PATH" ]; then
             mkdir --mode $MODE "$SNAPSHOT_PATH"
@@ -118,7 +125,7 @@ if [ $delete == 0 ]; then
     fi
 
     #
-    # Make sure that snapshot does not already exist.
+    # Make sure that snapshot does not exist already.
     #
     if [ -x "$SNAPSHOT_PATH" ]; then
         echo "Error: snapshot $SNAPSHOT_PATH already exists." >&2
@@ -128,15 +135,7 @@ if [ $delete == 0 ]; then
     if [ ! -z ${ENC_HOME+x} ]; then
         # create temporary directory to look up its encrypted name
         mkdir --mode $MODE "$SNAPSHOT_PATH"
-        ENC_SNAPSHOTS=$(encrypted_path .snapshots $HOME $ENC_HOME)
-        DIR_SNAPSHOTS=$SNAPSHOTS
-        if [ ! -z "$subdir" ]; then
-            ENC_SNAPSHOTS=$(encrypted_path "$subdir" $DIR_SNAPSHOTS \
-                                           $ENC_SNAPSHOTS)
-            DIR_SNAPSHOTS=$DIR_SNAPSHOTS/"$subdir"
-        fi
-        ENC_SNAPSHOT_PATH=$(encrypted_path $(basename "$SNAPSHOT_PATH") \
-                                           "$DIR_SNAPSHOTS" $ENC_SNAPSHOTS)
+        ENC_SNAPSHOT_PATH=$(encrypted_path "$SNAPSHOT_PATH")
         rmdir "$SNAPSHOT_PATH"
 
         # create read-only snapshot
@@ -155,7 +154,7 @@ else
             exit 1
         fi
         SNAPSHOT_PATH=$SNAPSHOTS
-        if [ ! -z "$subdir" ]; then
+        if [ -n "$subdir" ]; then
             SNAPSHOT_PATH=$SNAPSHOTS/$subdir
         fi
         SNAPSHOT_PATH=$SNAPSHOT_PATH/"$snapshot"
@@ -168,15 +167,7 @@ else
         elif [ ! -z ${ENC_HOME+x} ]; then
             mv "$SNAPSHOT_PATH" "$SNAPSHOT_PATH".renamed
             mkdir --mode $MODE "$SNAPSHOT_PATH"
-            ENC_SNAPSHOTS=$(encrypted_path .snapshots $HOME $ENC_HOME)
-            DIR_SNAPSHOTS=$SNAPSHOTS
-            if [ ! -z "$subdir" ]; then
-                ENC_SNAPSHOTS=$(encrypted_path "$subdir" $DIR_SNAPSHOTS \
-                                               $ENC_SNAPSHOTS)
-                DIR_SNAPSHOTS=$DIR_SNAPSHOTS/"$subdir"
-            fi
-            ENC_SNAPSHOT_PATH=$(encrypted_path "$snapshot" "$DIR_SNAPSHOTS" \
-                                               $ENC_SNAPSHOTS)
+            ENC_SNAPSHOT_PATH=$(encrypted_path "$SNAPSHOT_PATH")
             rmdir "$SNAPSHOT_PATH"
             mv "$SNAPSHOT_PATH".renamed "$SNAPSHOT_PATH"
             sudo btrfs subvolume delete -c $ENC_SNAPSHOT_PATH > /dev/null && \
