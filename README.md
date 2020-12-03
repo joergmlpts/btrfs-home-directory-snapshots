@@ -1,10 +1,10 @@
 # Snapshots for Home Directories on BTRFS
 
-Snapshot support for home directories on [btrfs](https://en.wikipedia.org/wiki/Btrfs). Btrfs is a filesystem that is based on b-trees and copy-on-write (COW). It supports snapshots which are created instantaneously and with virtually no additional disk space. Script `snapshot` implements these snapshots for regular home directories and also for home directories encrypted with ecryptfs.
+Snapshot support for home directories on [btrfs](https://en.wikipedia.org/wiki/Btrfs). Btrfs is a filesystem that is based on b-trees and copy-on-write (COW). It supports snapshots which are created instantaneously and initially with virtually no additional disk space. Script `snapshot` implements these snapshots for regular home directories and also for home directories encrypted with ecryptfs.
 
-The script `snapshot` creates and deletes read-only snapshots of the home directory. These snapshots are stored either in directory `~/.snapshots/` or a subdirectory like `hourly` or `monthly` of `~/.snapshots/`. Each snapshot contains all the files and directories of the home directory from the time the snapshot was created. These read-only snapshots provide access to files which may have been modified or deleted after the snapshot was created. Snapshots are not a replacement for backups; they do not guard against hardware failures. Unlike btrfs snapshots taken with [timeshift](https://github.com/teejee2008/timeshift), the purpose is not to later restore the system with the snapshots. Home directory snapshots are mainly used to retrieve a bunch of files or directories that have since been changed or deleted. 
+The script `snapshot` takes and deletes read-only snapshots of the home directory. These snapshots are stored either in directory `~/.snapshots/` or a subdirectory like `hourly` or `monthly` of `~/.snapshots/`. Each snapshot contains all the files and directories of the home directory from the time the snapshot was created. These read-only snapshots provide access to files which may have been modified or deleted after the snapshot was created. Snapshots are not a replacement for backups; they do not guard against hardware failures. Unlike btrfs snapshots taken with [timeshift](https://github.com/teejee2008/timeshift), the purpose is not to later restore the system with the snapshots. Home directory snapshots are mainly used to retrieve a bunch of files or directories that have since been changed or deleted. 
 
-In order for these scripts to work, the `btrfs` file system needs to used for home directories. Different Linux distros differ in the file systems they install by default; many optionally support btrfs as well. Fedora 33 already uses btrfs as its default file system. Ubuntu allows to select btrfs at the time of installation.
+In order for these scripts to work, the `btrfs` file system needs to used for home directories. Linux distros differ in the file systems they install by default; many optionally support btrfs as well. Fedora 33 already uses btrfs as its default file system. Ubuntu allows to select btrfs at the time of installation.
 
 Btrfs snapshots can only be created from btrfs subvolumes. In order for the
 `snapshot` command to be usable, the home directory thus needs to be a btrfs
@@ -33,7 +33,7 @@ $ sudo -i
  ...
 # On Fedora create user with encrypted home as this:
 # dnf install -y ecryptfs-utils
-# useradd -G ecryptfs -etest
+# useradd -G ecryptfs etest
 # passwd etest # set password, it will be needed by next command
 # ecryptfs-migrate-home etest # enter password
 ## login as etest right away, BEFORE NEXT REBOOT
@@ -116,7 +116,7 @@ ID 825 gen 13186 top level 822 path @home/.ecryptfs/etest/.Private/ECRYPTFS_FNEK
 
 ## Caveats
 
-Btrfs allows subvolumes and snapshots to be created by regular users but only root is permitted to delete them. `snapshot` calls `sudo` when non-root users delete snapshots with `snapshot -d` or `snapshot --delete`. `sudo` which asks for the password. Users need to be allowed to invoke `sudo` to delete their snapshots. Example:
+Btrfs allows subvolumes and snapshots to be created by regular users but only root is permitted to delete them. `snapshot` calls `sudo` when non-root users delete snapshots with `snapshot -d` or `snapshot --delete`. `sudo` asks for the password. Users need to be allowed to invoke `sudo` to delete their snapshots. Example:
 
 ```
 etest@server:~$ snapshot -d 2020-11-26_20:59:07
