@@ -34,7 +34,7 @@ $ sudo -i
  ...
 # On Fedora create user with encrypted home as this:
 # dnf install -y ecryptfs-utils
-# useradd -G ecryptfs -etest
+# useradd -G ecryptfs etest
 # passwd etest # set password, it will be needed by next command
 # ecryptfs-migrate-home etest # enter password
 ## login as etest right away, BEFORE NEXT REBOOT
@@ -126,6 +126,7 @@ etest is not in the sudoers file.  This incident will be reported.
 ```
 
 After adding etest to the `sudo` group, the snapshot can be deleted:
+
 ```
 etest@server:~$ snapshot -d 2020-11-26_20:59:07
 [sudo] password for etest: 
